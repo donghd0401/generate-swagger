@@ -33,12 +33,12 @@ public class ServiceImpl implements IService {
         Object response;
         if (contentType.contains("json")) {
             data = objectMapper.readValue(stringData, Map.class);
-            requestBody = objectMapper.readValue(data.get("request").toString(), Map.class);
-            response = objectMapper.readValue(data.get("response").toString(), Map.class);
+            requestBody = (Map<String, Object>) data.get("request");
+            response = data.get("response");
         } else {
             data = xmlMapper.readValue(stringData, Map.class);
-            requestBody = xmlMapper.readValue(data.get("request").toString(), Map.class);
-            response = xmlMapper.readValue(data.get("response").toString(), Map.class);
+            requestBody = (Map<String, Object>) data.get("request");
+            response = data.get("response");
         }
         Swagger swagger = new Swagger();
         swagger.setSwagger("2.0");
@@ -134,23 +134,21 @@ public class ServiceImpl implements IService {
             } else if (item instanceof List) {
                 ArrayProperty property = new ArrayProperty();
                 property.setType("array");
-                property.setItems(new RefProperty("#/definitions/" + key));
-                propertyMap.put(key, property);
-                modelMap.putAll(addDefinition(key, (Map<String, Object>) ((List<?>) item).get(0)));
-            } else if (item instanceof Integer) {
-                IntegerProperty property = new IntegerProperty();
-                property.setExample(item);
-                propertyMap.put(key, property);
-            } else if (item instanceof String) {
-                StringProperty property = new StringProperty();
-                property.setExample(item);
-                propertyMap.put(key, property);
-            } else if (item instanceof Boolean) {
-                BooleanProperty property = new BooleanProperty();
-                property.setExample(item);
-                propertyMap.put(key, property);
-            } else if (item instanceof Double) {
-                DoubleProperty property = new DoubleProperty();
+                Object firstItem = ((List<?>) item).get(0);
+                if (firstItem.getClass().getName().startsWith("java.lang")) {
+                    ObjectProperty objectProperty = new ObjectProperty();
+                    objectProperty.setType(firstItem.getClass().getName().replace("java.lang.", "").toLowerCase());
+                    property.setItems(objectProperty);
+                    property.setExample(((List<?>) item).toArray());
+                    propertyMap.put(key, property);
+                } else {
+                    property.setItems(new RefProperty("#/definitions/" + key));
+                    propertyMap.put(key, property);
+                    modelMap.putAll(addDefinition(key, (Map<String, Object>) ((List<?>) item).get(0)));
+                }
+            } else if (item.getClass().getName().startsWith("java.lang")) {
+                ObjectProperty property = new ObjectProperty();
+                property.setType(item.getClass().getName().replace("java.lang.", "").toLowerCase());
                 property.setExample(item);
                 propertyMap.put(key, property);
             }
