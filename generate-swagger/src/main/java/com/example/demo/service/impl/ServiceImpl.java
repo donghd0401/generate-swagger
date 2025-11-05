@@ -11,7 +11,10 @@ import io.swagger.models.parameters.BodyParameter;
 import io.swagger.models.parameters.HeaderParameter;
 import io.swagger.models.parameters.Parameter;
 import io.swagger.models.parameters.QueryParameter;
-import io.swagger.models.properties.*;
+import io.swagger.models.properties.ArrayProperty;
+import io.swagger.models.properties.ObjectProperty;
+import io.swagger.models.properties.Property;
+import io.swagger.models.properties.RefProperty;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 
@@ -24,22 +27,22 @@ import java.util.Map;
 public class ServiceImpl implements IService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final XmlMapper xmlMapper = new XmlMapper();
+    private int count;
 
     @Override
     public String createSwagger(HttpServletRequest httpServletRequest, Map<String, String> requestHeaders, Map<String, String> requestParams, String stringData) throws JsonProcessingException {
+        count = 1;
         Map<String, Object> data;
         String contentType = requestHeaders.get("content-type");
         Map<String, Object> requestBody;
         Object response;
         if (contentType.contains("json")) {
             data = objectMapper.readValue(stringData, Map.class);
-            requestBody = (Map<String, Object>) data.get("request");
-            response = data.get("response");
         } else {
             data = xmlMapper.readValue(stringData, Map.class);
-            requestBody = (Map<String, Object>) data.get("request");
-            response = data.get("response");
         }
+        requestBody = (Map<String, Object>) data.get("request");
+        response = data.get("response");
         Swagger swagger = new Swagger();
         swagger.setSwagger("2.0");
         Info info = new Info();
@@ -57,7 +60,7 @@ public class ServiceImpl implements IService {
         operation.setProduces(List.of(contentType));
         operation.setParameters(getHeaderAndQueryParameters(requestHeaders, requestParams));
         if (!requestBody.isEmpty()) {
-            operation.addParameter(handleBodyParameter(definitions, requestBody));
+            operation.addParameter(handleBodyParameter(definitions, requestBody, contentType));
         }
         if (response instanceof Map) {
             operation.setResponses(handleResponse(definitions, response));
@@ -94,12 +97,19 @@ public class ServiceImpl implements IService {
         return list;
     }
 
-    private Map<String, Response> handleResponse(Map<String, Model> definitions, Object responseBody) {
+    private Map<String, Response> handleResponse(Map<String, Model> definitions, Object responseBody, String contentType) {
         Response response = new Response();
         response.setDescription("a Response to be returned");
         if (responseBody instanceof Map) {
-            definitions.putAll(addDefinition("Response", (Map<String, Object>) responseBody));
-            response.setResponseSchema(new RefModel("#/definitions/Response"));
+            if (!contentType.contains("json")) {
+                Map<String, Object> responseMap = (Map<String, Object>) responseBody;
+                String name = responseMap.keySet().toArray()[0].toString();
+                definitions.putAll(addDefinition(name, (Map<String, Object>) responseMap.get(name)));
+                response.setResponseSchema(new RefModel("#/definitions/" + name));
+            } else {
+                definitions.putAll(addDefinition("Response", (Map<String, Object>) responseBody));
+                response.setResponseSchema(new RefModel("#/definitions/Response"));
+            }
         } else {
             ModelImpl model = new ModelImpl();
             model.setType("String");
@@ -110,13 +120,19 @@ public class ServiceImpl implements IService {
         return responseMap;
     }
 
-    private Parameter handleBodyParameter(Map<String, Model> definitions, Map<String, Object> requestBody) {
-        definitions.putAll(addDefinition("Request", requestBody));
+    private Parameter handleBodyParameter(Map<String, Model> definitions, Map<String, Object> requestBody, String contentType) {
         BodyParameter bodyParameter = new BodyParameter();
         bodyParameter.setName("body");
         bodyParameter.setIn("body");
         bodyParameter.setDescription("");
-        bodyParameter.setSchema(new RefModel("#/definitions/Request"));
+        if (!contentType.contains("json")) {
+            String name = requestBody.keySet().toArray()[0].toString();
+            definitions.putAll(addDefinition(name, (Map<String, Object>) requestBody.get(name)));
+            bodyParameter.setSchema(new RefModel("#/definitions/" + name));
+        } else {
+            definitions.putAll(addDefinition("Request", requestBody));
+            bodyParameter.setSchema(new RefModel("#/definitions/Request"));
+        }
         return bodyParameter;
     }
 
@@ -128,9 +144,10 @@ public class ServiceImpl implements IService {
             if (item instanceof Map) {
                 RefProperty property = new RefProperty();
                 property.setType("object");
-                property.set$ref("#/definitions/" + key);
+                property.set$ref("#/definitions/" + key + "_" + count);
                 propertyMap.put(key, property);
-                modelMap.putAll(addDefinition(key, (Map<String, Object>) item));
+                modelMap.putAll(addDefinition(key + "_" + count, (Map<String, Object>) item));
+                count++;
             } else if (item instanceof List) {
                 ArrayProperty property = new ArrayProperty();
                 property.setType("array");
@@ -142,9 +159,10 @@ public class ServiceImpl implements IService {
                     property.setExample(((List<?>) item).toArray());
                     propertyMap.put(key, property);
                 } else {
-                    property.setItems(new RefProperty("#/definitions/" + key));
+                    property.setItems(new RefProperty("#/definitions/" + key + "_" + count));
                     propertyMap.put(key, property);
-                    modelMap.putAll(addDefinition(key, (Map<String, Object>) ((List<?>) item).get(0)));
+                    modelMap.putAll(addDefinition(key + "_" + count, (Map<String, Object>) ((List<?>) item).get(0)));
+                    count++;
                 }
             } else if (item.getClass().getName().startsWith("java.lang")) {
                 ObjectProperty property = new ObjectProperty();
