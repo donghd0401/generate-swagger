@@ -63,7 +63,7 @@ public class ServiceImpl implements IService {
             operation.addParameter(handleBodyParameter(definitions, requestBody, contentType));
         }
         if (response instanceof Map) {
-            operation.setResponses(handleResponse(definitions, response));
+            operation.setResponses(handleResponse(definitions, response, contentType));
         }
         path.set(httpServletRequest.getMethod().toLowerCase(), operation);
         paths.put(httpServletRequest.getRequestURI(), path);
