@@ -34,14 +34,13 @@ public class ServiceImpl implements IService {
         count = 1;
         Map<String, Object> data;
         String contentType = requestHeaders.get("content-type");
-        Map<String, Object> requestBody;
         Object response;
         if (contentType.contains("json")) {
             data = objectMapper.readValue(stringData, Map.class);
         } else {
             data = xmlMapper.readValue(stringData, Map.class);
         }
-        requestBody = (Map<String, Object>) data.get("request");
+        Object requestBody = data.get("request");
         response = data.get("response");
         Swagger swagger = new Swagger();
         swagger.setSwagger("2.0");
@@ -59,7 +58,7 @@ public class ServiceImpl implements IService {
         operation.setConsumes(List.of(contentType));
         operation.setProduces(List.of(contentType));
         operation.setParameters(getHeaderAndQueryParameters(requestHeaders, requestParams));
-        if (!requestBody.isEmpty()) {
+        if (requestBody != null) {
             operation.addParameter(handleBodyParameter(definitions, requestBody, contentType));
         }
         if (response instanceof Map) {
@@ -104,8 +103,8 @@ public class ServiceImpl implements IService {
             if (!contentType.contains("json")) {
                 Map<String, Object> responseMap = (Map<String, Object>) responseBody;
                 String name = responseMap.keySet().toArray()[0].toString();
-                definitions.putAll(addDefinition(name, (Map<String, Object>) responseMap.get(name)));
-                response.setResponseSchema(new RefModel("#/definitions/" + name));
+                response.setResponseSchema(new RefModel("#/definitions/" + name + "_" + count));
+                definitions.putAll(addDefinition(name + "_" + count, (Map<String, Object>) responseMap.get(name)));
             } else {
                 definitions.putAll(addDefinition("Response", (Map<String, Object>) responseBody));
                 response.setResponseSchema(new RefModel("#/definitions/Response"));
@@ -120,18 +119,28 @@ public class ServiceImpl implements IService {
         return responseMap;
     }
 
-    private Parameter handleBodyParameter(Map<String, Model> definitions, Map<String, Object> requestBody, String contentType) {
+    private Parameter handleBodyParameter(Map<String, Model> definitions, Object requestBody, String contentType) {
         BodyParameter bodyParameter = new BodyParameter();
         bodyParameter.setName("body");
         bodyParameter.setIn("body");
         bodyParameter.setDescription("");
         if (!contentType.contains("json")) {
-            String name = requestBody.keySet().toArray()[0].toString();
-            definitions.putAll(addDefinition(name, (Map<String, Object>) requestBody.get(name)));
+            String name = ((Map<String, Object>) requestBody).keySet().toArray()[0].toString();
+            definitions.putAll(addDefinition(name, (Map<String, Object>) ((Map<String, Object>) requestBody).get(name)));
             bodyParameter.setSchema(new RefModel("#/definitions/" + name));
         } else {
-            definitions.putAll(addDefinition("Request", requestBody));
-            bodyParameter.setSchema(new RefModel("#/definitions/Request"));
+            if (requestBody instanceof List) {
+                ArrayModel model = new ArrayModel();
+                RefProperty property = new RefProperty();
+                property.set$ref("#/definitions/Request");
+                model.setItems(property);
+                bodyParameter.setSchema(model);
+
+                definitions.putAll(addDefinition("Request", (Map<String, Object>) ((List<?>) requestBody).get(0)));
+            } else {
+                bodyParameter.setSchema(new RefModel("#/definitions/Request"));
+                definitions.putAll(addDefinition("Request", (Map<String, Object>) requestBody));
+            }
         }
         return bodyParameter;
     }
