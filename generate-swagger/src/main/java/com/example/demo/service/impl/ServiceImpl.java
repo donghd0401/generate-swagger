@@ -88,7 +88,7 @@ public class ServiceImpl implements IService {
         String baseDir = System.getProperty("user.dir") + FOLDER_NAME;
         File file = new File(baseDir);
         try {
-            boolean mkdir = file.mkdir();
+            boolean mkdir = file.mkdirs();
             FileOutputStream fos = new FileOutputStream(baseDir+ convertUtf8ToAscii(title) + ".json");
             fos.write(swaggerString.getBytes(StandardCharsets.UTF_8));
             fos.close();
