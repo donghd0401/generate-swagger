@@ -37,6 +37,7 @@ public class ServiceImpl implements IService {
     private final XmlMapper xmlMapper = new XmlMapper();
     private int count;
     private final static String FOLDER_NAME = "/swagger-folder/";
+
     @Override
     public String createSwagger(HttpServletRequest httpServletRequest, Map<String, String> requestHeaders, Map<String, String> requestParams, String stringData) throws JsonProcessingException {
         count = 1;
@@ -89,13 +90,17 @@ public class ServiceImpl implements IService {
         File file = new File(baseDir);
         try {
             boolean mkdir = file.mkdirs();
-            FileOutputStream fos = new FileOutputStream(baseDir+ convertUtf8ToAscii(title) + ".json");
-            fos.write(swaggerString.getBytes(StandardCharsets.UTF_8));
-            fos.close();
-        } catch (SecurityException | FileNotFoundException e) {
-            log.error("Method does not permit the named directory to be created!");
+            if (mkdir) {
+                FileOutputStream fos = new FileOutputStream(baseDir + convertUtf8ToAscii(title) + ".json");
+                fos.write(swaggerString.getBytes(StandardCharsets.UTF_8));
+                fos.close();
+            } else {
+                throw new SecurityException("SecurityException: Method does not permit the named directory to be created!");
+            }
+        } catch (FileNotFoundException e) {
+            log.error("FileNotFoundException!");
         } catch (IOException e) {
-            log.error("Error while writing the swagger file!");
+            log.error("IOException: Error while writing the swagger file!");
         }
     }
 
