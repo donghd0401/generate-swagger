@@ -95,12 +95,12 @@ public class ServiceImpl implements IService {
                 fos.write(swaggerString.getBytes(StandardCharsets.UTF_8));
                 fos.close();
             } else {
-                throw new SecurityException("SecurityException: Method does not permit the named directory to be created!");
+                throw new SecurityException("Method does not permit the named directory to be created!");
             }
         } catch (FileNotFoundException e) {
-            log.error("FileNotFoundException!");
+            log.error("File not found, cannot be opened, or is not a regular file!");
         } catch (IOException e) {
-            log.error("IOException: Error while writing the swagger file!");
+            log.error("Error while writing the swagger file!");
         }
     }
 
