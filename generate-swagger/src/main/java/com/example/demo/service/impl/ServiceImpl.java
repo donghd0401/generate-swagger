@@ -25,10 +25,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 @Service
 @Slf4j
@@ -36,7 +34,6 @@ public class ServiceImpl implements IService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final XmlMapper xmlMapper = new XmlMapper();
     private int count;
-    private final static String FOLDER_NAME = "/swagger-folder/";
 
     @Override
     public String createSwagger(HttpServletRequest httpServletRequest, Map<String, String> requestHeaders, Map<String, String> requestParams, String stringData) throws JsonProcessingException {
@@ -86,7 +83,9 @@ public class ServiceImpl implements IService {
     }
 
     private void writeFileSwagger(String swaggerString, String title) {
-        String baseDir = System.getProperty("user.dir") + FOLDER_NAME;
+        SimpleDateFormat format = new SimpleDateFormat("/dd_MM_yyyy/");
+        String today = format.format(new Date());
+        String baseDir = System.getProperty("user.dir") + today;
         File file = new File(baseDir);
         try {
             boolean mkdir = file.mkdirs();
