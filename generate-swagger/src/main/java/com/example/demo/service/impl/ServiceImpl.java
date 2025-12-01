@@ -16,19 +16,27 @@ import io.swagger.models.properties.ObjectProperty;
 import io.swagger.models.properties.Property;
 import io.swagger.models.properties.RefProperty;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
+@Slf4j
 public class ServiceImpl implements IService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final XmlMapper xmlMapper = new XmlMapper();
     private int count;
-
+    private final static String FOLDER_NAME = "/swagger-folder/";
     @Override
     public String createSwagger(HttpServletRequest httpServletRequest, Map<String, String> requestHeaders, Map<String, String> requestParams, String stringData) throws JsonProcessingException {
         count = 1;
@@ -45,7 +53,8 @@ public class ServiceImpl implements IService {
         Swagger swagger = new Swagger();
         swagger.setSwagger("2.0");
         Info info = new Info();
-        info.setTitle(data.get("title").toString());
+        String title = data.get("title").toString();
+        info.setTitle(title);
         info.setVersion(data.get("version").toString());
         swagger.setInfo(info);
         swagger.setHost(data.get("host").toString());
@@ -58,21 +67,43 @@ public class ServiceImpl implements IService {
         operation.setConsumes(List.of(contentType));
         operation.setProduces(List.of(contentType));
         operation.setParameters(getHeaderAndQueryParameters(requestHeaders, requestParams));
-        if (requestBody != null) {
-            operation.addParameter(handleBodyParameter(definitions, requestBody, contentType));
-        }
         if (response instanceof Map) {
             operation.setResponses(handleResponse(definitions, response, contentType));
+        }
+        if (requestBody != null) {
+            operation.addParameter(handleBodyParameter(definitions, requestBody, contentType));
         }
         path.set(httpServletRequest.getMethod().toLowerCase(), operation);
         paths.put(httpServletRequest.getRequestURI(), path);
         swagger.setPaths(paths);
         swagger.setDefinitions(definitions);
-
-
         objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
         objectMapper.addMixIn(Object.class, SwaggerExcludeFields.class);
-        return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(swagger);
+        String swaggerString = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(swagger);
+        writeFileSwagger(swaggerString, title);
+        return swaggerString;
+    }
+
+    private void writeFileSwagger(String swaggerString, String title) {
+        String baseDir = System.getProperty("user.dir") + FOLDER_NAME;
+        File file = new File(baseDir);
+        try {
+            boolean mkdir = file.mkdir();
+            FileOutputStream fos = new FileOutputStream(baseDir+ convertUtf8ToAscii(title) + ".json");
+            fos.write(swaggerString.getBytes(StandardCharsets.UTF_8));
+            fos.close();
+        } catch (SecurityException | FileNotFoundException e) {
+            log.error("Method does not permit the named directory to be created!");
+        } catch (IOException e) {
+            log.error("Error while writing the swagger file!");
+        }
+    }
+
+    private String convertUtf8ToAscii(String utf8) {
+        String normalized = Normalizer.normalize(utf8, Normalizer.Form.NFD);
+        String ascii = normalized.replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
+        ascii = ascii.replaceAll("đ", "d").replaceAll("Đ", "D");
+        return ascii;
     }
 
     private List<Parameter> getHeaderAndQueryParameters(Map<String, String> requestHeaders, Map<String, String> requestParams) {
@@ -103,8 +134,8 @@ public class ServiceImpl implements IService {
             if (!contentType.contains("json")) {
                 Map<String, Object> responseMap = (Map<String, Object>) responseBody;
                 String name = responseMap.keySet().toArray()[0].toString();
-                response.setResponseSchema(new RefModel("#/definitions/" + name + "_" + count));
-                definitions.putAll(addDefinition(name + "_" + count, (Map<String, Object>) responseMap.get(name)));
+                response.setResponseSchema(new RefModel("#/definitions/" + name));
+                definitions.putAll(addDefinition(name, (Map<String, Object>) responseMap.get(name)));
             } else {
                 definitions.putAll(addDefinition("Response", (Map<String, Object>) responseBody));
                 response.setResponseSchema(new RefModel("#/definitions/Response"));
@@ -126,8 +157,9 @@ public class ServiceImpl implements IService {
         bodyParameter.setDescription("");
         if (!contentType.contains("json")) {
             String name = ((Map<String, Object>) requestBody).keySet().toArray()[0].toString();
-            definitions.putAll(addDefinition(name, (Map<String, Object>) ((Map<String, Object>) requestBody).get(name)));
-            bodyParameter.setSchema(new RefModel("#/definitions/" + name));
+            bodyParameter.setSchema(new RefModel("#/definitions/" + name + "_" + count));
+            definitions.putAll(addDefinition(name + "_" + count, (Map<String, Object>) ((Map<String, Object>) requestBody).get(name)));
+            count++;
         } else {
             if (requestBody instanceof List) {
                 ArrayModel model = new ArrayModel();
@@ -135,7 +167,6 @@ public class ServiceImpl implements IService {
                 property.set$ref("#/definitions/Request");
                 model.setItems(property);
                 bodyParameter.setSchema(model);
-
                 definitions.putAll(addDefinition("Request", (Map<String, Object>) ((List<?>) requestBody).get(0)));
             } else {
                 bodyParameter.setSchema(new RefModel("#/definitions/Request"));
